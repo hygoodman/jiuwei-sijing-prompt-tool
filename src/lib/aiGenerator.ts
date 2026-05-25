@@ -37,6 +37,11 @@ const getHeaders = (config: ModelConfig) => {
   return headers;
 };
 
+const shouldUseProxy = () => {
+  if (typeof window === "undefined") return false;
+  return !["localhost", "127.0.0.1", "::1"].includes(window.location.hostname);
+};
+
 const extractErrorMessage = async (response: Response) => {
   try {
     const data = await response.json();
@@ -44,6 +49,42 @@ const extractErrorMessage = async (response: Response) => {
   } catch {
     return response.statusText;
   }
+};
+
+const callChatCompletions = async (config: ModelConfig, body: Record<string, unknown>) => {
+  if (shouldUseProxy()) {
+    const response = await fetch("/api/ai-proxy", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        apiBaseUrl: config.apiBaseUrl,
+        apiKey: config.apiKey,
+        modelName: config.modelName,
+        body,
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error(await extractErrorMessage(response));
+    }
+
+    return response.json();
+  }
+
+  const response = await fetch(getEndpoint(config.apiBaseUrl), {
+    method: "POST",
+    headers: getHeaders(config),
+    body: JSON.stringify({
+      ...body,
+      model: getModelName(config),
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error(await extractErrorMessage(response));
+  }
+
+  return response.json();
 };
 
 export const buildSystemPrompt = () => `你是一名专业的 AI 视频提示词工程师，擅长电商带货短视频、Seedance 2.0、即梦、可灵、Sora 等视频生成工具提示词写作。
@@ -167,26 +208,20 @@ export const openAICompatibleProvider: AIProvider = {
     }
 
     try {
-      const response = await fetch(getEndpoint(config.apiBaseUrl), {
-        method: "POST",
-        headers: getHeaders(config),
-        body: JSON.stringify({
-          model: getModelName(config),
-          messages: [{ role: "user", content: "请只回复 OK" }],
-          temperature: 0,
-          max_completion_tokens: 8,
-        }),
+      await callChatCompletions(config, {
+        messages: [{ role: "user", content: "请只回复 OK" }],
+        temperature: 0,
+        max_completion_tokens: 8,
       });
 
-      if (!response.ok) {
-        return { ok: false, message: `连接失败：${await extractErrorMessage(response)}` };
-      }
-
-      return { ok: true, message: "连接成功，当前配置可用。" };
+      return {
+        ok: true,
+        message: shouldUseProxy() ? "连接成功，已通过本站代理转发模型请求。" : "连接成功，当前配置可用。",
+      };
     } catch (error) {
       return {
         ok: false,
-        message: `连接失败：${error instanceof Error ? error.message : "未知错误"}。如果是 CORS，请尝试兼容代理地址。`,
+        message: `连接失败：${error instanceof Error ? error.message : "未知错误"}。`,
       };
     }
   },
@@ -199,26 +234,16 @@ export const openAICompatibleProvider: AIProvider = {
       throw new Error("AI 配置缺失，请填写 API Base URL、API Key 和 Model Name。");
     }
 
-    const response = await fetch(getEndpoint(config.apiBaseUrl), {
-      method: "POST",
-      headers: getHeaders(config),
-      body: JSON.stringify({
-        model: getModelName(config),
-        messages: [
-          { role: "system", content: buildSystemPrompt() },
-          { role: "user", content: buildUserPrompt(request) },
-        ],
-        temperature: 0.35,
-        max_completion_tokens: 4096,
-        response_format: { type: "json_object" },
-      }),
+    const data = await callChatCompletions(config, {
+      messages: [
+        { role: "system", content: buildSystemPrompt() },
+        { role: "user", content: buildUserPrompt(request) },
+      ],
+      temperature: 0.35,
+      max_completion_tokens: 4096,
+      response_format: { type: "json_object" },
     });
 
-    if (!response.ok) {
-      throw new Error(await extractErrorMessage(response));
-    }
-
-    const data = await response.json();
     const content = data?.choices?.[0]?.message?.content;
     if (typeof content !== "string" || !content.trim()) {
       throw new Error("AI 返回内容为空或格式不兼容。");
