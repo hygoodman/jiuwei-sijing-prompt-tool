@@ -6,6 +6,7 @@ import type { PromptResult } from "../types/prompt";
 interface OutputPanelProps {
   result: PromptResult | null;
   onCopy: () => void;
+  onManualCopy: () => void;
   onExportTxt: () => void;
   onExportMarkdown: () => void;
   copied: boolean;
@@ -21,6 +22,7 @@ const sourceLabel: Record<PromptResult["source"], string> = {
 export default function OutputPanel({
   result,
   onCopy,
+  onManualCopy,
   onExportTxt,
   onExportMarkdown,
   copied,
@@ -43,6 +45,14 @@ export default function OutputPanel({
           >
             <Clipboard size={16} />
             {copied ? "已复制" : "复制全部"}
+          </button>
+          <button
+            type="button"
+            onClick={onManualCopy}
+            disabled={!result}
+            className="inline-flex items-center gap-2 rounded-md border border-stone-300 bg-stone-50 px-3 py-2 text-sm font-medium text-stone-700 transition hover:border-emerald-400 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            手动复制
           </button>
           <button
             type="button"

@@ -208,7 +208,10 @@ export default function App() {
       setCopied(true);
       setStatus({
         type: "success",
-        message: outcome.method === "clipboard" ? "已复制到剪贴板。" : "已通过兼容方式复制到剪贴板。",
+        message:
+          outcome.method === "clipboard"
+            ? "已复制到剪贴板。"
+            : "已通过兼容方式复制到剪贴板；如果系统剪贴板仍为空，请点“手动复制”。",
       });
       window.setTimeout(() => setCopied(false), 1600);
       return;
@@ -326,6 +329,7 @@ export default function App() {
             result={result}
             copied={copied}
             onCopy={handleCopy}
+            onManualCopy={() => result && setManualCopyText(result.copyReadyPrompt)}
             onExportTxt={() => result && exportTxt(result)}
             onExportMarkdown={() => result && exportMarkdown(result)}
           />
